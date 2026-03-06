@@ -1,6 +1,6 @@
 # 🏗️ DPF Data Flow Architecture
 
-> **Purpose:** This document traces every DPF JSON field from the **UI Wizard** through **API calls**, into **MetaQ database tables**, and finally into the assembled **DPF output**. It covers Step 1 (Product Identity) and Step 2 (Dataset Configuration).
+> **Purpose:** This document traces every DPF JSON field from the **UI Wizard** through **API calls**, into **MetaQ database tables**, and finally into the assembled **DPF output**. It covers all 10 wizard steps — from Product Identity through Submit & Attestation.
 
 ---
 
@@ -413,40 +413,483 @@ Auth types (`UAMI`, `EVA`, `SPN`, `Certificates`) are stored as a **JSONB array*
 
 ---
 
-## 🔁 End-to-End Recap
+## 🔐 Step 3 — Entitlements
+
+> **Endpoint:** `PATCH /dataproducts/:id/entitlements`
+> **Goal:** Define access policies — either self-managed or DPAS-aligned.
+
+### Step 3 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 3 — Entitlements"]) --> DECISION{"Own entitlement\nprocess?"}
+
+    DECISION -->|"✅ Yes"| OWN["Self-managed\nEntitlements"]
+    DECISION -->|"❌ No"| DPAS["DPAS-aligned\nEntitlements"]
+
+    OWN --> OWN_PAYLOAD["📤 PATCH\n• own_entitlement_process: true\n• bbs_entitlement_info\n• janus_bbs_maintainer_group"]
+
+    DPAS --> DPAS_PAYLOAD["📤 PATCH\n• align_to_dpas_model: true\n• eligible_roles[]\n• approval_rules\n• field_level_restrictions\n• cross_domain_sharing"]
+
+    OWN_PAYLOAD --> TX{{"🔒 DB Transaction"}}
+    DPAS_PAYLOAD --> TX
+
+    TX --> W1["UPSERT → access.principal\n+ access.bbs_ad_group\n(BBS/Janus groups)"]
+    TX --> W2["INSERT → access.entitlement\n(per eligible role/group)"]
+    TX --> W3["UPDATE → governance.\nschema_columns_governance\n(field-level restrictions)"]
+    TX --> W4["INSERT → internal.resource_tag\n(flags: own_process,\nalign_dpas, cross_domain,\napproval_rules)"]
+
+    W1 --> DONE["✅ DPF: has_policy[]"]
+    W2 --> DONE
+    W3 --> DONE
+    W4 --> DONE
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style DECISION fill:#3498DB,stroke:#2C80B4,color:#fff
+    style OWN fill:#F39C12,stroke:#D68910,color:#fff
+    style DPAS fill:#E67E22,stroke:#CA6F1E,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style DONE fill:#2ECC71,stroke:#27AE60,color:#fff
+```
+
+### Payload — Own Entitlement Process
+
+```json
+{
+  "own_entitlement_process": true,
+  "bbs_entitlement_info": "BBS-GROUP-12345",
+  "janus_bbs_maintainer_group": "WMA-Janus-Maintainers"
+}
+```
+
+### Payload — DPAS-Aligned
+
+```json
+{
+  "own_entitlement_process": false,
+  "align_to_dpas_model": true,
+  "eligible_roles": ["WMA-Data-Consumer", "WMA-Data-Analyst"],
+  "approval_rules": "Manager + Data Owner approval required",
+  "field_level_restrictions": "SSN masked, DOB truncated to year",
+  "cross_domain_sharing": false,
+  "janus_bbs_maintainer_group": "WMA-Janus-Maintainers"
+}
+```
+
+### Step 3 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `access.principal` + `access.bbs_ad_group` | **UPSERT** | BBS/Janus groups |
+| `access.entitlement` | **INSERT** | Per eligible role/group |
+| `governance.schema_columns_governance` | **UPDATE** | Field-level restrictions |
+| `internal.resource_tag` | **INSERT** | Flags: `own_process`, `align_dpas`, `cross_domain`, `approval_rules` |
+
+### Step 3 → DPF Field Populated
+
+```
+✅ has_policy[]
+```
+
+---
+
+## 📖 Step 4 — KDE Semantics *(Read-Only)*
+
+> **Endpoint:** `GET /dataproducts/:id/kde`
+> **Goal:** Display column-level business definitions from the ontology.
+
+```mermaid
+flowchart LR
+    REQ["GET /dataproducts/:id/kde"] --> READ["📖 Read from:\n• ontology.column_ontology_mapping\n• ontology.ontology_element"]
+    READ --> DISPLAY["🖥️ UI displays column-level\nbusiness definitions\nper dataset"]
+
+    style REQ fill:#3498DB,stroke:#2C80B4,color:#fff
+    style READ fill:#7B68EE,stroke:#5A4CB5,color:#fff
+    style DISPLAY fill:#50C878,stroke:#3A9B5A,color:#fff
+```
+
+> ℹ️ **No PATCH.** No API write. Purely reads ontology mappings for display.
+
+---
+
+## 📊 Step 5 — Scope & Data Quality
+
+> **Endpoint:** `PATCH /dataproducts/:id/compliance` *(section: `data_quality`)*
+> **Goal:** Define data quality rules and targets.
+
+### Step 5 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 5 — Data Quality"]) --> PATCH["📤 PATCH /dataproducts/:id/compliance\nsection = 'data_quality'"]
+
+    PATCH --> TX{{"🔒 DB Transaction"}}
+
+    TX --> T1["INSERT/UPDATE →\ninternal.resource_tag\n(batch — one tag per field)"]
+
+    T1 --> TAGS["Tags written:\n• dq.completeness_target = 99.5%\n• dq.accuracy_target = 99.9%\n• dq.timeliness_target = < 15 min\n• dq.consistency_rules\n• dq.uniqueness_rules\n• dq.validity_rules\n• dq.fitness_score = 85"]
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style TAGS fill:#EBF5FB,stroke:#3498DB
+```
+
+### Step 5 — Request Payload
+
+```json
+{
+  "section": "data_quality",
+  "data_scope": "Global",
+  "refresh_frequency": "Daily",
+  "quality_rules": "NOT NULL on account_id; market_value >= 0",
+  "completeness_target": "99.5%",
+  "accuracy_target": "99.9%",
+  "timeliness_target": "< 15 minutes",
+  "consistency_rules": "Cross-system reconciliation",
+  "uniqueness_rules": "Unique on portfolio_id",
+  "validity_rules": "ISO date formats",
+  "fitness_score": "85"
+}
+```
+
+### Step 5 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `internal.resource_tag` | **INSERT/UPDATE** *(batch)* | One tag per field — `key=dq.<field>`, `value=<input>` |
+
+---
+
+## 📜 Step 6 — Data Contract
+
+> **Endpoint:** `PATCH /dataproducts/:id/compliance` *(section: `data_contract`)*
+> **Goal:** Define SLAs, retention, and change management policies.
+
+### Step 6 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 6 — Data Contract"]) --> PATCH["📤 PATCH /dataproducts/:id/compliance\nsection = 'data_contract'"]
+
+    PATCH --> TX{{"🔒 DB Transaction"}}
+
+    TX --> T1["INSERT/UPDATE →\ninternal.resource_tag\n(batch)"]
+
+    T1 --> TAGS["Tags written:\n• contract.data_retention = 7 years\n• contract.sla_uptime = 99.9%\n• contract.support_hours = 24/7\n• contract.change_notification_days = 30\n• contract.breaking_changes_policy\n• contract.consumer_onboarding\n• contract.escalation_path"]
+
+    TAGS --> NOTE["📎 Note:\nserviceLevelObjectiveDescription\nin DPF outputs is assembled\nfrom these contract.* tags"]
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style TAGS fill:#F4ECF7,stroke:#8E44AD
+    style NOTE fill:#FDF2E9,stroke:#E67E22
+```
+
+### Step 6 — Request Payload
+
+```json
+{
+  "section": "data_contract",
+  "data_retention": "7 years",
+  "sla_uptime": "99.9%",
+  "support_hours": "24/7",
+  "change_notification_days": "30",
+  "breaking_changes_policy": "Semantic versioning with 30-day deprecation",
+  "consumer_onboarding": "Self-service via portal",
+  "escalation_path": "L1 → Support → IT Lead → Owner"
+}
+```
+
+### Step 6 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `internal.resource_tag` | **INSERT/UPDATE** *(batch)* | `key=contract.<field>`, `value=<input>` |
+
+---
+
+## 🔀 Step 7 — Data Lineage *(Read-Only)*
+
+> **Endpoint:** `GET /dataproducts/:id/lineage`
+> **Goal:** Visualize data flow — input datasets → data product → output datasets.
+
+```mermaid
+flowchart LR
+    REQ["GET /dataproducts/:id/lineage"] --> READ["📖 Derived from:\n• dprod.dataproduct_dataset\n• dprod.dataproduct_port\n(created in Step 2)"]
+    READ --> VIZ["🖥️ Lineage Visualization\n\nInput Datasets\n→ Data Product\n→ Output Datasets"]
+
+    style REQ fill:#3498DB,stroke:#2C80B4,color:#fff
+    style READ fill:#7B68EE,stroke:#5A4CB5,color:#fff
+    style VIZ fill:#50C878,stroke:#3A9B5A,color:#fff
+```
+
+> ℹ️ **No PATCH.** Purely derived from structures created in Step 2.
+
+---
+
+## 🛡️ Step 8 — Sensitivity & Compliance
+
+> **Endpoint:** `PATCH /dataproducts/:id/compliance` *(section: `sensitivity`)*
+> **Goal:** Classify data sensitivity, PII handling, and regulatory requirements.
+
+### Step 8 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 8 — Sensitivity"]) --> PATCH["📤 PATCH /dataproducts/:id/compliance\nsection = 'sensitivity'"]
+
+    PATCH --> TX{{"🔒 DB Transaction"}}
+
+    TX --> W1["UPDATE → governance.\nresource_governance\n• data_classification\n• client_data_category\n• governance_status"]
+    TX --> W2["INSERT → internal.resource_tag\n• pii flags\n• regulatory requirements\n• dpa flags"]
+
+    W1 --> DPF["✅ DPF enriched:\n• has_policy[]\n• confidentialityClassification\n(on outputs)"]
+    W2 --> DPF
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style DPF fill:#2ECC71,stroke:#27AE60,color:#fff
+```
+
+### Step 8 — Request Payload
+
+```json
+{
+  "section": "sensitivity",
+  "data_classification": "Confidential",
+  "contains_pii": true,
+  "regulatory_requirements": ["GDPR", "SOX", "FINMA"],
+  "pii_handling_procedure": "Tokenization at ingestion, masking for non-prod",
+  "dpa_required": false,
+  "policies": ["GDPR-Data-Retention", "UBS-CID-Policy"]
+}
+```
+
+### Step 8 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `governance.resource_governance` | **UPDATE** | `data_classification`, `client_data_category`, `governance_status` |
+| `internal.resource_tag` | **INSERT** | PII, regulatory, DPA flags |
+
+### Step 8 → DPF Fields Populated
+
+```
+✅ has_policy[] (enriched)
+✅ outputs[].confidentialityClassification
+```
+
+---
+
+## 🤖 Step 9 — AI Readiness
+
+> **Endpoint:** `PATCH /dataproducts/:id/product-info`
+> **Goal:** Tag the data product with AI/ML readiness metadata.
+
+### Step 9 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 9 — AI Readiness"]) --> PATCH["📤 PATCH /dataproducts/:id/product-info"]
+
+    PATCH --> TX{{"🔒 DB Transaction"}}
+
+    TX --> T1["INSERT/UPDATE →\ninternal.resource_tag\n(batch)"]
+
+    T1 --> TAGS
+
+    subgraph TAGS ["AI Tags Written"]
+        direction TB
+        TAG1["ai.ml_feature_store = Enabled"]
+        TAG2["ai.model_usage = Training"]
+        TAG3["ai.embedding_support = Supported"]
+        TAG4["ai.bias_assessment = Completed"]
+        TAG5["ai.explainability = Required"]
+        TAG6["ai.model_governance = Centralized"]
+    end
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style TAGS fill:#EBF5FB,stroke:#3498DB
+```
+
+### Step 9 — Request Payload
+
+```json
+{
+  "tags": [
+    { "key": "ai.ml_feature_store", "value": "Enabled" },
+    { "key": "ai.model_usage", "value": "Training" },
+    { "key": "ai.embedding_support", "value": "Supported" },
+    { "key": "ai.bias_assessment", "value": "Completed" },
+    { "key": "ai.explainability", "value": "Required" },
+    { "key": "ai.model_governance", "value": "Centralized" }
+  ]
+}
+```
+
+### Step 9 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `internal.resource_tag` | **INSERT/UPDATE** *(batch)* | All stored as `ai.*` tags |
+
+---
+
+## 🚀 Step 10 — Submit & Attestation
+
+> **Endpoint:** `PATCH /dataproducts/:id/publish`
+> **Goal:** Owner attests accuracy & ownership, then publishes the data product.
+
+### Step 10 Flow Diagram
+
+```mermaid
+flowchart TD
+    START(["🟢 Step 10 — Publish"]) --> PATCH["📤 PATCH /dataproducts/:id/publish\n• attest_accuracy: true\n• attest_ownership: true"]
+
+    PATCH --> TX{{"🔒 DB Transaction"}}
+
+    TX --> W1["UPDATE → dcatv3.resource\n• status = 'published'"]
+    TX --> W2["UPDATE → dprod.dataproduct\n• lifecycle_status = 'published'"]
+    TX --> W3["INSERT → internal.resource_tag\n• attestation records\n• timestamp"]
+
+    W1 --> RESP
+    W2 --> RESP
+    W3 --> RESP
+
+    RESP["✅ Response includes:\ndpf_yaml_data — full DPF JSON\nassembled by\napp_procs.get_dataproduct_dpf_yaml()"]
+
+    RESP --> FINAL["📄 Complete DPF JSON\nready for consumption"]
+
+    style START fill:#27AE60,stroke:#1E8449,color:#fff
+    style TX fill:#F39C12,stroke:#D68910,color:#fff
+    style RESP fill:#2ECC71,stroke:#27AE60,color:#fff
+    style FINAL fill:#E74C3C,stroke:#B83A2E,color:#fff
+```
+
+### Step 10 — Request Payload
+
+```json
+{
+  "attest_accuracy": true,
+  "attest_ownership": true
+}
+```
+
+### Step 10 — DB Write Summary
+
+| Table | Operation | Key Fields |
+|:------|:---------:|:-----------|
+| `dcatv3.resource` | **UPDATE** | `status='published'` |
+| `dprod.dataproduct` | **UPDATE** | `lifecycle_status='published'` |
+| `internal.resource_tag` | **INSERT** | Attestation records with timestamp |
+
+---
+
+## 🔁 End-to-End Recap — All 10 Steps
 
 ```mermaid
 flowchart TD
     subgraph STEP1 ["📝 Step 1 — Product Identity"]
-        S1A["UI: Name, Domain,\nOwner, Platforms, Tags"]
-        S1B["POST /dataproducts"]
-        S1C["9 MetaQ table writes"]
-        S1D["DPF: name, domain,\ndescription, owner,\nmaintainer, platforms"]
-        S1A --> S1B --> S1C --> S1D
+        S1["POST /dataproducts\n→ 9 table writes\n→ DPF: name, domain,\nowner, platforms"]
     end
 
     subgraph STEP2 ["📦 Step 2 — Datasets & Ports"]
-        S2A["UI: Dataset config,\nPorts, Schemas"]
-        S2B["PATCH /dataproducts/:id\n/datasets"]
-        S2C["5 writes/dataset\n+ 6 writes/port\n+ platform-specific"]
-        S2D["DPF: inputs[], outputs[],\ndistributions[],\nservices[], schemas"]
-        S2A --> S2B --> S2C --> S2D
+        S2["PATCH .../datasets\n→ 5 writes/dataset\n+ 6 writes/port\n→ DPF: inputs[], outputs[]"]
+    end
+
+    subgraph STEP3 ["🔐 Step 3 — Entitlements"]
+        S3["PATCH .../entitlements\n→ access.*, governance\n→ DPF: has_policy[]"]
+    end
+
+    subgraph STEP4 ["📖 Step 4 — KDE Semantics"]
+        S4["GET .../kde\n(read-only)\nOntology mappings"]
+    end
+
+    subgraph STEP5 ["📊 Step 5 — Data Quality"]
+        S5["PATCH .../compliance\nsection=data_quality\n→ dq.* tags"]
+    end
+
+    subgraph STEP6 ["📜 Step 6 — Data Contract"]
+        S6["PATCH .../compliance\nsection=data_contract\n→ contract.* tags"]
+    end
+
+    subgraph STEP7 ["🔀 Step 7 — Lineage"]
+        S7["GET .../lineage\n(read-only)\nDerived from Step 2"]
+    end
+
+    subgraph STEP8 ["🛡️ Step 8 — Sensitivity"]
+        S8["PATCH .../compliance\nsection=sensitivity\n→ governance + tags\n→ DPF: has_policy[]"]
+    end
+
+    subgraph STEP9 ["🤖 Step 9 — AI Readiness"]
+        S9["PATCH .../product-info\n→ ai.* tags"]
+    end
+
+    subgraph STEP10 ["🚀 Step 10 — Publish"]
+        S10["PATCH .../publish\n→ status = published\n→ Returns full DPF"]
     end
 
     subgraph ASSEMBLY ["🔧 DPF Assembly"]
-        ASM1["GET /dataproducts/:id/dpf"]
-        ASM2["reader_dataproduct view"]
-        ASM3["app_procs.\nget_dataproduct_dpf_yaml()"]
-        ASM4["📄 Complete DPF JSON"]
-        ASM1 --> ASM2 --> ASM3 --> ASM4
+        ASM["GET .../dpf\n→ reader_dataproduct view\n→ app_procs.get_dataproduct_dpf_yaml()\n→ 📄 Complete DPF JSON"]
     end
 
-    STEP1 --> STEP2 --> ASSEMBLY
+    STEP1 --> STEP2 --> STEP3 --> STEP4
+    STEP4 --> STEP5 --> STEP6 --> STEP7
+    STEP7 --> STEP8 --> STEP9 --> STEP10
+    STEP10 --> ASSEMBLY
 
     style STEP1 fill:#EBF5FB,stroke:#3498DB
     style STEP2 fill:#F4ECF7,stroke:#8E44AD
+    style STEP3 fill:#FEF9E7,stroke:#F1C40F
+    style STEP4 fill:#EAFAF1,stroke:#2ECC71
+    style STEP5 fill:#EBF5FB,stroke:#3498DB
+    style STEP6 fill:#F4ECF7,stroke:#8E44AD
+    style STEP7 fill:#EAFAF1,stroke:#2ECC71
+    style STEP8 fill:#FDEDEC,stroke:#E74C3C
+    style STEP9 fill:#EBF5FB,stroke:#3498DB
+    style STEP10 fill:#D5F5E3,stroke:#27AE60
     style ASSEMBLY fill:#D5F5E3,stroke:#27AE60
 ```
+
+---
+
+## 🗺️ Complete API Surface Summary
+
+```mermaid
+flowchart LR
+    subgraph WRITE ["✏️ Write Endpoints"]
+        direction TB
+        E1["POST /dataproducts\n— Step 1"]
+        E2["PATCH .../datasets\n— Step 2"]
+        E3["PATCH .../entitlements\n— Step 3"]
+        E5["PATCH .../compliance\n— Steps 5, 6, 8"]
+        E9["PATCH .../product-info\n— Step 9"]
+        E10["PATCH .../publish\n— Step 10"]
+    end
+
+    subgraph READ ["👁️ Read-Only"]
+        direction TB
+        R4["GET .../kde\n— Step 4"]
+        R7["GET .../lineage\n— Step 7"]
+        RDPF["GET .../dpf\n— DPF Assembly"]
+    end
+
+    style WRITE fill:#FEF9E7,stroke:#F1C40F
+    style READ fill:#EAFAF1,stroke:#2ECC71
+```
+
+| Endpoint | Method | Step | Writes To |
+|:---------|:------:|:----:|:----------|
+| `/dataproducts` | **POST** | 1 | `dcatv3`, `dprod`, `persona`, `ontology`, `internal`, `access` |
+| `/dataproducts/:id/datasets` | **PATCH** | 2 | `dcatv3` (resource + dataset + dataservice + distribution), `dprod`, `platform.*`, `model`, `governance` |
+| `/dataproducts/:id/entitlements` | **PATCH** | 3 | `access.*`, `governance`, `internal` |
+| `/dataproducts/:id/kde` | **GET** | 4 | *(read-only)* |
+| `/dataproducts/:id/compliance` | **PATCH** | 5, 6, 8 | `governance`, `internal` *(uses `section` discriminator)* |
+| `/dataproducts/:id/lineage` | **GET** | 7 | *(read-only)* |
+| `/dataproducts/:id/product-info` | **PATCH** | 9 | `internal.resource_tag` |
+| `/dataproducts/:id/publish` | **PATCH** | 10 | `dcatv3`, `dprod`, `internal` |
+| `/dataproducts/:id/dpf` | **GET** | — | Calls stored proc → returns DPF JSON |
 
 ---
 
