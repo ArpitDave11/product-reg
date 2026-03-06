@@ -1,0 +1,245 @@
+DPAS API (Data Product Registration)
+  ┌─────┬────────┬────────────────────────────────┬───────────┬───────────────────────────────────────┐
+  │  #  │ Method │            Endpoint            │  Used in  │                Purpose                │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 1   │ POST   │ /dataproducts                  │ Step 1    │ Create skeleton product               │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 2   │ GET    │ /dataproducts                  │ List view │ Paginated list                        │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 3   │ GET    │ /dataproducts/:id              │ Any step  │ Get product + ETag                    │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 4   │ DELETE │ /dataproducts/:id              │ Admin     │ Soft-delete (retire)                  │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 5   │ PATCH  │ /dataproducts/:id/datasets     │ Step 2    │ Save datasets + ports                 │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 6   │ PATCH  │ /dataproducts/:id/entitlements │ Step 3    │ Save entitlements                     │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 7   │ GET    │ /dataproducts/:id/kde          │ Step 4    │ Read-only KDE columns                 │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 8   │ PATCH  │ /dataproducts/:id/compliance   │ Step 5    │ Data quality (section=data_quality)   │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 9   │ PATCH  │ /dataproducts/:id/compliance   │ Step 6    │ Data contract (section=data_contract) │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 10  │ PATCH  │ /dataproducts/:id/compliance   │ Step 8    │ Sensitivity (section=sensitivity)     │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 11  │ GET    │ /dataproducts/:id/lineage      │ Step 7    │ Read-only lineage graph               │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 12  │ PATCH  │ /dataproducts/:id/product-info │ Step 9    │ Save tags                             │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 13  │ PATCH  │ /dataproducts/:id/publish      │ Step 10   │ Publish + get DPF                     │
+  ├─────┼────────┼────────────────────────────────┼───────────┼───────────────────────────────────────┤
+  │ 14  │ GET    │ /dataproducts/:id/dpf          │ Step 10   │ Fetch DPF YAML                        │
+  └─────┴────────┴────────────────────────────────┴───────────┴───────────────────────────────────────┘
+  Steps 5/6/8 hit the same endpoint (#8-10), just different section values in the body. So it's 11 unique endpoints, 14 logical calls.
+
+  MetaQ API (Dataset Metadata)
+  ┌─────┬────────┬─────────────────┬───────────────────┐
+  │  #  │ Method │    Endpoint     │      Purpose      │
+  ├─────┼────────┼─────────────────┼───────────────────┤
+  │ 15  │ GET    │ /health         │ Health check      │
+  ├─────┼────────┼─────────────────┼───────────────────┤
+  │ 16  │ GET    │ /datasets       │ List all datasets │
+  ├─────┼────────┼─────────────────┼───────────────────┤
+  │ 17  │ GET    │ /dataset/:title │ Search by title   │
+  └─────┴────────┴─────────────────┴───────────────────┘
+  External APIs
+  ┌─────┬────────┬─────────────────────┬───────────────────────────────┐
+  │  #  │ Method │      Endpoint       │            Purpose            │
+  ├─────┼────────┼─────────────────────┼───────────────────────────────┤
+  │ 18  │ GET    │ /appdir/search?q=   │ Search App Directory (Step 1) │
+  ├─────┼────────┼─────────────────────┼───────────────────────────────┤
+  │ 19  │ GET    │ /adgroups/search?q= │ Search AD Groups (Step 1/3)   │
+  ├─────┼────────┼─────────────────────┼───────────────────────────────┤
+  │ 20  │ GET    │ /models/list        │ List data models (Step 2)     │
+  └─────┴────────┴─────────────────────┴───────────────────────────────┘
+  Totals
+  ┌──────────┬──────────────────┬───────────────┐
+  │ Category │ Unique endpoints │ Logical calls │
+  ├──────────┼──────────────────┼───────────────┤
+  │ DPAS     │ 11               │ 14            │
+  ├──────────┼──────────────────┼───────────────┤
+  │ MetaQ    │ 3                │ 3             │
+  ├──────────┼──────────────────┼───────────────┤
+  │ External │ 3                │ 3             │
+  ├──────────┼──────────────────┼───────────────┤
+  │ Total    │ 17               │ 20            │
+  └──────────┴──────────────────┴───────────────┘
+  All 20 are covered by MSW mock handlers, and each has a corresponding React Query hook (query or mutation).
+
+  Ready to proceed with Phase 2?
+
+❯ can you also map each with sample payload and expected respose inline with same table                                                                                                                     
+                                                                                         
+⏺ DPAS API                                                                                                                                                                                                  
+  #: 1                                                                                                                            
+  Method: POST
+  Endpoint: /dataproducts                                                                                                                                                                                   
+  Step: 1
+  Sample Payload: { display_name: "WMA Account Master", name: "wma-account-master", description: "Account data product", product_type: "source_aligned", source_application_id: "APP-001",                  
+    source_application_name: "WMA Core Banking", owning_business_division: "WMA", domain: "Account", sub_domain: "Core", owner_email: "arpit.dave@ubs.com", owner_gpn: "GPN123", 
+    maintainers_group: { "WMA-Data-Maintainers": ["ad-001"] }, allowed_platforms: ["adls", "databricks"], tags: [{ key: "env", value: "prod" }] }
+  Expected Response: { resource_id: "a1b2c3d4-...", resource_iri: "urn:ubs:dataproduct:wma-account-master", name: "wma-account-master", display_name: "WMA Account Master", status: "draft", created_at:
+    "2026-03-06T10:00:00Z", etag: "\"v101-mock\"" }
+  ────────────────────────────────────────
+  #: 2
+  Method: GET
+  Endpoint: /dataproducts?page=1&pageSize=25&status=draft
+  Step: List
+  Sample Payload: (none)
+  Expected Response: { items: [{ resource_id: "...", resource_iri: "...", name: "...", display_name: "...", status: "draft", created_at: "...", etag: "..." }], total: 1, page: 1, pageSize: 25 }
+  ────────────────────────────────────────
+  #: 3
+  Method: GET
+  Endpoint: /dataproducts/:id
+  Step: Any
+  Sample Payload: (none)
+  Expected Response: { resource_id: "a1b2c3d4-...", resource_iri: "urn:ubs:dataproduct:wma-account-master", name: "wma-account-master", display_name: "WMA Account Master", status: "draft", created_at:
+    "...", etag: "..." } + Header: ETag: "v101-mock"
+  ────────────────────────────────────────
+  #: 4
+  Method: DELETE
+  Endpoint: /dataproducts/:id
+  Step: Admin
+  Sample Payload: (none)
+  Expected Response: { resource_id: "...", ..., status: "retired" }
+  ────────────────────────────────────────
+  #: 5
+  Method: PATCH
+  Endpoint: /dataproducts/:id/datasets
+  Step: 2
+  Sample Payload: { datasets: [{ display_name: "Account Holdings", name: "account-holdings", confidentiality_classification: "internal", cid_category: "CID", description: "Daily holdings",
+    related_model_id: "model-001", ports: [{ direction: "input", platform_type: "adls", auth_types: ["UAMI"], protocol: "abfss", physical_schema: null, platform_fields: { storage_account:
+    "wmastorage", container_name: "raw", format: "parquet", jurisdiction: "US" } }, { direction: "output", platform_type: "databricks", auth_types: ["SPN"], platform_fields: {
+    server_hostname: "adb-123.azuredatabricks.net", database_name: "gold", http_path: "/sql/1.0/warehouses/abc" } }] }] }
+  Expected Response: { resource_id: "a1b2c3d4-...", datasets: [{ dataset_id: "d1e2f3-...", name: "account-holdings", display_name: "Account Holdings", ports: [{ port_id: "p1-...", direction: "input",
+    platform_type: "adls", dataservice_id: "ds1-..." }, { port_id: "p2-...", direction: "output", platform_type: "databricks", dataservice_id: "ds2-..." }] }], etag: "\"v102-mock\"" }
+  ────────────────────────────────────────
+  #: 6
+  Method: PATCH
+  Endpoint: /dataproducts/:id/entitlements
+  Step: 3
+  Sample Payload: { own_entitlement_process: false, bbs_entitlement_info: "Standard BBS flow", align_to_dpas_model: true, align_existing_structure: false, eligible_roles: ["reader", "contributor"],
+    approval_rules: "Manager approval required", field_level_restrictions: "SSN column masked", cross_domain_sharing: true, janus_bbs_maintainer_group: "WMA-Janus-Maintainers" }
+  Expected Response: { resource_id: "a1b2c3d4-...", own_entitlement_process: false, entitlements_configured: true, etag: "\"v103-mock\"" }
+  ────────────────────────────────────────
+  #: 7
+  Method: GET
+  Endpoint: /dataproducts/:id/kde
+  Step: 4
+  Sample Payload: (none)
+  Expected Response: { resource_id: "a1b2c3d4-...", datasets: [{ dataset_id: "d1e2f3-...", name: "account-holdings", columns: [{ column_name: "id", column_type: "UUID", ontology_element: null,
+    business_definition: null, confidence_score: null, key_data_element: true }, { column_name: "name", column_type: "VARCHAR(255)", ontology_element: null, business_definition: null,
+    confidence_score: null, key_data_element: false }] }] }
+  ────────────────────────────────────────
+  #: 8
+  Method: PATCH
+  Endpoint: /dataproducts/:id/compliance
+  Step: 5
+  Sample Payload: { section: "data_quality", data_scope: "All WMA accounts", refresh_frequency: "Daily", quality_rules: "NOT NULL on account_id", completeness_target: "99.5%", accuracy_target: "99.9%",
+    timeliness_target: "T+1", consistency_rules: "Cross-system reconciliation", uniqueness_rules: "Unique on account_id", validity_rules: "ISO format dates", fitness_score: "92" }
+  Expected Response: { resource_id: "a1b2c3d4-...", section: "data_quality", saved: true, etag: "\"v104-mock\"" }
+  ────────────────────────────────────────
+  #: 9
+  Method: PATCH
+  Endpoint: /dataproducts/:id/compliance
+  Step: 6
+  Sample Payload: { section: "data_contract", data_retention: "7 years", sla_uptime: "99.9%", support_hours: "8am-6pm EST", change_notification_days: "30", access_agreement: "Standard DUA",
+    breaking_changes_policy: "Semantic versioning", consumer_onboarding: "Self-service portal", escalation_path: "data-support@ubs.com" }
+  Expected Response: { resource_id: "a1b2c3d4-...", section: "data_contract", saved: true, etag: "\"v105-mock\"" }
+  ────────────────────────────────────────
+  #: 10
+  Method: PATCH
+  Endpoint: /dataproducts/:id/compliance
+  Step: 8
+  Sample Payload: { section: "sensitivity", data_classification: "Confidential", contains_pii: true, regulatory_requirements: ["GDPR", "FINMA"], pii_handling_procedure: "Tokenization at ingestion",
+    dpa_required: true, policies: ["data-retention-policy", "cross-border-transfer"] }
+  Expected Response: { resource_id: "a1b2c3d4-...", section: "sensitivity", saved: true, etag: "\"v106-mock\"" }
+  ────────────────────────────────────────
+  #: 11
+  Method: GET
+  Endpoint: /dataproducts/:id/lineage
+  Step: 7
+  Sample Payload: (none)
+  Expected Response: { resource_id: "a1b2c3d4-...", product_name: "wma-account-master", inputs: [{ dataset_id: "d1-...", name: "account-holdings", display_name: "Account Holdings", platform_type: "adls",
+    dataservice_id: "ds1-..." }], outputs: [{ dataset_id: "d1-...", name: "account-holdings", display_name: "Account Holdings", platform_type: "databricks", dataservice_id: "ds2-..." }] }
+  ────────────────────────────────────────
+  #: 12
+  Method: PATCH
+  Endpoint: /dataproducts/:id/product-info
+  Step: 9
+  Sample Payload: { tags: [{ key: "env", value: "prod" }, { key: "team", value: "wma-data" }, { key: "cost-center", value: "CC-4500" }] }
+  Expected Response: { resource_id: "a1b2c3d4-...", tags_saved: 3, etag: "\"v107-mock\"" }
+  ────────────────────────────────────────
+  #: 13
+  Method: PATCH
+  Endpoint: /dataproducts/:id/publish
+  Step: 10
+  Sample Payload: { attest_accuracy: true, attest_ownership: true }
+  Expected Response: { resource_id: "a1b2c3d4-...", resource_iri: "urn:ubs:dataproduct:wma-account-master", status: "published", published_at: "2026-03-06T15:00:00Z", dpf_yaml_data: { name:
+    "wma-account-master", domain: "Account", ... }, etag: "\"v108-mock\"" }
+  ────────────────────────────────────────
+  #: 14
+  Method: GET
+  Endpoint: /dataproducts/:id/dpf
+  Step: 10
+  Sample Payload: (none)
+  Expected Response: { dpf_yaml_data: { name: "wma-account-master", domain: "Account", description: "...", dataProductType: "source_aligned" } }
+  MetaQ API
+  #: 15
+  Method: GET
+  Endpoint: /health
+  Sample Payload: (none)
+  Expected Response: { status: "ok" }
+  ────────────────────────────────────────
+  #: 16
+  Method: GET
+  Endpoint: /datasets
+  Sample Payload: (none)
+  Expected Response: [{ dataset_title: "rcat0100", name: "RCAT 0100 - Reference Categories", description: "...", cidcategory: "NON-CID", kde: "account_id, category_code", ... }, ...]
+  ────────────────────────────────────────
+  #: 17
+  Method: GET
+  Endpoint: /dataset/:title
+  Sample Payload: (none — title in URL)
+  Expected Response: [{ dataset_title: "fx_rates_daily", name: "FX Rates Daily Snapshot", cidcategory: "NON-CID", ... }]
+  External APIs
+  #: 18
+  Method: GET
+  Endpoint: /appdir/search?q=WMA
+  Sample Payload: (none — query in URL)
+  Expected Response: [{ app_id: "APP-001", app_name: "WMA Core Banking", description: "Core banking platform" }, { app_id: "APP-002", app_name: "WMA Portfolio System", description: "Portfolio management"
+    }]
+  ────────────────────────────────────────
+  #: 19
+  Method: GET
+  Endpoint: /adgroups/search?q=WMA
+  Sample Payload: (none — query in URL)
+  Expected Response: [{ object_id: "ad-001", display_name: "WMA-Data-Maintainers", group_type: "Security" }, { object_id: "ad-002", display_name: "WMA-Data-Consumers", group_type: "Security" }]
+  ────────────────────────────────────────
+  #: 20
+  Method: GET
+  Endpoint: /models/list?domain=Account
+  Sample Payload: (none — filter in URL)
+  Expected Response: [{ model_id: "model-001", model_name: "Account Master Schema", domain: "Account" }]
+  Error Responses (all endpoints)
+  ┌────────┬────────────────────────┬────────────────────────────────────────────────────────────────────────────────────┐
+  │ Status │          When          │                                       Shape                                        │
+  ├────────┼────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ 404    │ Resource not found     │ { error: "NotFound", message: "Not found", timestamp: "..." }                      │
+  ├────────┼────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ 409    │ Duplicate name on POST │ { error: "Conflict", message: "\"name\" already exists", timestamp: "..." }        │
+  ├────────┼────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ 412    │ ETag mismatch          │ { error: "PreconditionFailed", message: "ETag mismatch", timestamp: "..." }        │
+  ├────────┼────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+  │ 422    │ Validation failure     │ { error: "ValidationError", message: "Missing required fields", timestamp: "..." } │
+  └────────┴────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+  Headers
+  ┌───────────────────────────────┬───────────────────┬─────────────────────────────────────────────┐
+  │            Header             │     Direction     │                   Used by                   │
+  ├───────────────────────────────┼───────────────────┼─────────────────────────────────────────────┤
+  │ ETag                          │ Response → Client │ All PATCH + GET-by-id responses             │
+  ├───────────────────────────────┼───────────────────┼─────────────────────────────────────────────┤
+  │ If-Match                      │ Client → Server   │ All PATCH requests (optimistic concurrency) │
+  ├───────────────────────────────┼───────────────────┼─────────────────────────────────────────────┤
+  │ Authorization: Bearer <token> │ Client → Server   │ All requests (MSAL interceptor)             │
+  └───────────────────────────────┴───────────────────┴─────────────────────────────────────────────┘
