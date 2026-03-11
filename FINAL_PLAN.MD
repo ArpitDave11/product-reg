@@ -1,20 +1,3 @@
-MANDATORY: Before writing ANY code, read STYLE_BIBLE.md in the project root. Every line of code must follow these patterns exactly.
-Key rules you MUST follow:
-
-Inputs: Always use fieldClass(errors, 'fieldName') — never write custom input classes
-Labels: Always use labelClass — never write custom label styles
-Grid: Always grid grid-cols-2 gap-x-6 gap-y-5 for form fields — never flex or space-y
-Colors: Always hex like text-[#374151] — never Tailwind names like text-gray-600
-Sizes: Always pixel like text-[13px] — never text-sm or text-base
-Sections: Always start with <SectionHeader title="..." /> — never raw <h2> or <h3>
-Errors: Every field must have <FieldError message={errors.fieldName} /> after it
-No wrapping cards inside steps — the parent RegistrationForm already wraps in a card
-No shadcn <Input>, <Label>, <Select> — use plain HTML elements with our constants
-
-The existing RegistrationForm.tsx is the gold standard. If you're unsure, copy an existing step's exact pattern.
-
-
-
 # WMA v2 — ATOMIC TASK LIST
 ## One Task = One File = One Prompt to Claude Code
 
