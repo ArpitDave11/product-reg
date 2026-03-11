@@ -792,7 +792,7 @@ Authorization: Bearer <token>
     "owningBusinessEntity": "Wealth Management Americas",
     "dataProductOwner": { "gpn": "GPN-12345", "email": "arpit.dave@ubs.com" },
     "maintainerGroup": { "PROD": ["WMA-Data-Maintainers"] },
-    "allowedOperationalPlatform": ["powerbi", "devpod"],
+    "allowedOperationalPlatform": ["powerbi", "devpod","denodo","databricks","kafka"],
     "contactPointEmail": ["arpit.dave@ubs.com"],
     "dpf_model_version": "1.0.0",
     "inputs": ["..."],
